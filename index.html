@@ -1080,37 +1080,27 @@ function render() {
     body.appendChild(h('div',{style:{marginTop:'12px',fontSize:'11px',color:'#94a3b8',textAlign:'center'}},'表の数値は3回計測の平均値です（mmHg）'));
 
     // エクスポート・インポートパネル
-    body.appendChild(h('div',{style:{background:'white',borderRadius:'16px',padding:'14px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',marginTop:'12px'}},
+    const exportPanel = h('div',{style:{background:'white',borderRadius:'16px',padding:'14px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',marginTop:'12px'}},
       h('div',{style:{fontWeight:'700',color:'#1e293b',fontSize:'13px',marginBottom:'10px'}},'💾 データの保存・移行'),
       h('div',{style:{fontSize:'11px',color:'#64748b',marginBottom:'12px',lineHeight:'1.6'}},
         'CSVはExcel・スプレッドシートで開けます。JSONはこのアプリへの再インポート用です。機種変更の前にバックアップしておきましょう。'
       ),
-      h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
-        h('button',{
-          style:{flex:'1',minWidth:'120px',padding:'10px 8px',background:'#0891b2',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>exportCSV(state.records),
-        },'📊 CSV保存'),
-        h('button',{
-          style:{flex:'1',minWidth:'120px',padding:'10px 8px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>exportJSON(state.records),
-        },'📦 JSONバックアップ'),
-        h('button',{
-          style:{flex:'1',minWidth:'120px',padding:'10px 8px',background:'#d97706',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},
-          onclick:()=>importJSON(state.records, render),
-        },'📥 JSONインポート'),
-      ),
-    ));
-  }
-}
+    );
+    const exportBtnRow = h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
 
-// Optimised: re-render only session blocks on input change
-function renderSessionsOnly(body, changedPeriod) {
-  saveRecords(state.records);
-  // full re-render of input tab is fast enough for mobile
-  render();
-}
+    const csvBtn = document.createElement('button');
+    csvBtn.textContent = '📊 CSV保存';
+    csvBtn.style.cssText = 'flex:1;min-width:120px;padding:10px 8px;background:#0891b2;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    csvBtn.addEventListener('click', function(){ exportCSV(state.records); });
 
-render();
-</script>
-</body>
-</html>
+    const jsonBtn = document.createElement('button');
+    jsonBtn.textContent = '📦 JSONバックアップ';
+    jsonBtn.style.cssText = 'flex:1;min-width:120px;padding:10px 8px;background:#7c3aed;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    jsonBtn.addEventListener('click', function(){ exportJSON(state.records); });
+
+    const importBtn2 = document.createElement('button');
+    importBtn2.textContent = '📥 JSONインポート';
+    importBtn2.style.cssText = 'flex:1;min-width:120px;padding:10px 8px;background:#d97706;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    importBtn2.addEventListener('click', function(){ importJSON(state.records, render); });
+
+    e
