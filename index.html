@@ -1103,4 +1103,22 @@ function render() {
     importBtn2.style.cssText = 'flex:1;min-width:120px;padding:10px 8px;background:#d97706;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
     importBtn2.addEventListener('click', function(){ importJSON(state.records, render); });
 
-    e
+    exportBtnRow.appendChild(csvBtn);
+    exportBtnRow.appendChild(jsonBtn);
+    exportBtnRow.appendChild(importBtn2);
+    exportPanel.appendChild(exportBtnRow);
+    body.appendChild(exportPanel);
+  }
+}
+
+// Optimised: re-render only session blocks on input change
+function renderSessionsOnly(body, changedPeriod) {
+  saveRecords(state.records);
+  // full re-render of input tab is fast enough for mobile
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
