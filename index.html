@@ -182,14 +182,12 @@ function renderChart(records) {
   const lbl75=svgEl('text',{x:PL+cW+3,y:yS(75)+4,'font-size':'8',fill:'#2563eb','font-weight':'bold'});
   lbl75.textContent='75'; svg.appendChild(lbl75);
 
-  // データ線（脈拍の夜も追加）
+  // データ線（収縮期・拡張期のみ）
   const lines=[
     [p=>p.amAvg?.sys, '#3b82f6','2',''],
     [p=>p.pmAvg?.sys, '#3b82f6','2','5,3'],
     [p=>p.amAvg?.dia, '#06b6d4','1.5',''],
     [p=>p.pmAvg?.dia, '#06b6d4','1.5','5,3'],
-    [p=>p.amAvg?.pulse,'#f97316','1.5',''],
-    [p=>p.pmAvg?.pulse,'#f97316','1.5','5,3'],
   ];
   lines.forEach(([g,c,w,d])=>{
     const p=makePath(g); if(!p) return;
@@ -223,8 +221,6 @@ function renderChart(records) {
     mkL('#3b82f6','5,3','収縮期（夜・点線）'),
     mkL('#06b6d4','','拡張期（朝・実線）'),
     mkL('#06b6d4','5,3','拡張期（夜・点線）'),
-    mkL('#f97316','','脈拍（朝・実線）'),
-    mkL('#f97316','5,3','脈拍（夜・点線）'),
     mkRef('#4ade80','4,3','目標（上） 125'),
     mkRef('#60a5fa','4,3','目標（下） 75'),
   );
@@ -589,10 +585,9 @@ function buildShareSVGChart(records, ym, calcFn) {
   // 75目標線（下・青点線）
   svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(75).toFixed(1)}" y2="${yS(75).toFixed(1)}" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="4,3"/>`;
   svgBody+=`<text x="${PL+cW+3}" y="${(yS(75)+4).toFixed(1)}" font-size="8" fill="#2563eb" font-weight="bold">75</text>`;
-  // データ線（脈拍夜も追加）
+  // データ線（収縮期・拡張期のみ）
   [[p=>p.amAvg?.sys,'#3b82f6','2',''],[p=>p.pmAvg?.sys,'#3b82f6','2','5,3'],
    [p=>p.amAvg?.dia,'#06b6d4','1.5',''],[p=>p.pmAvg?.dia,'#06b6d4','1.5','5,3'],
-   [p=>p.amAvg?.pulse,'#f97316','1.5',''],[p=>p.pmAvg?.pulse,'#f97316','1.5','5,3']
   ].forEach(([g,c,w,d])=>{ const p=mkPath(g); if(!p) return;
     svgBody+=`<path d="${p}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linejoin="round"${d?` stroke-dasharray="${d}"`:''}/>`; });
   pts.forEach((p,i)=>{ if(i!==0&&i!==pts.length-1&&i%Math.ceil(pts.length/4)!==0) return;
@@ -606,8 +601,6 @@ function buildShareSVGChart(records, ym, calcFn) {
     ['#3b82f6','5,3','収縮期（夜・点線）'],
     ['#06b6d4','','拡張期（朝・実線）'],
     ['#06b6d4','5,3','拡張期（夜・点線）'],
-    ['#f97316','','脈拍（朝・実線）'],
-    ['#f97316','5,3','脈拍（夜・点線）'],
     ['#4ade80','4,3','目標（上） 125'],
     ['#60a5fa','4,3','目標（下） 75'],
   ];
