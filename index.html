@@ -350,4 +350,792 @@ function renderSession(label, icon, data, onChange, onMeta, period) {
   const memoEl=h('textarea',{placeholder:'ひと言メモ（例：食後、運動後など）',rows:'2',style:{
     width:'100%',border:'1.5px solid #e2e8f0',borderRadius:'8px',padding:'8px 10px',
     fontSize:'13px',fontFamily:'inherit',color:'#1e293b',background:'#f8fafc',
-    outline:'none',resize:'none',lineHeight:'1.5',m
+    outline:'none',resize:'none',lineHeight:'1.5',marginTop:'4px',boxSizing:'border-box',
+  }});
+  memoEl.textContent=data.memo||'';
+  memoEl.addEventListener('input',e=>onMeta('memo',e.target.value));
+
+  const avgBlock=h('div',{
+    id:`avg-${period}`,
+    style:{
+      marginTop:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px',
+      display: avg?'flex':'none', gap:'16px', alignItems:'center',
+    }
+  },
+    h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center'}},
+      h('span',{style:{fontSize:'11px',color:'#64748b'}},'平均'),
+      h('span',{style:{fontSize:'9px',color:'#94a3b8'}},'3回平均'),
+    ),
+    h('span',{'data-f':'sys', style:{fontWeight:'700',fontSize:'16px',color:status?status.color:'#22c55e'}}, avg?String(avg.sys):''),
+    h('span',{style:{color:'#cbd5e1'}},'/'),
+    h('span',{'data-f':'dia', style:{fontWeight:'600',fontSize:'16px',color:'#475569'}}, avg?String(avg.dia):''),
+    h('span',{style:{fontSize:'11px',color:'#94a3b8'}},'mmHg'),
+    h('span',{'data-f':'pulse', style:{fontWeight:'600',fontSize:'15px',color:'#f97316',marginLeft:'6px'}}, avg?String(avg.pulse):''),
+    h('span',{style:{fontSize:'11px',color:'#94a3b8'}},'bpm'),
+  );
+
+  return h('div',{style:{background:'white',borderRadius:'16px',padding:'16px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',marginBottom:'12px',border:'1px solid #f1f5f9'}},
+    h('div',{style:{display:'flex',alignItems:'center',marginBottom:'12px',gap:'8px'}},
+      h('span',{style:{fontSize:'20px'}},icon),
+      h('span',{style:{fontWeight:'700',fontSize:'15px',color:'#1e293b'}},label),
+      h('span',{id:`badge-${period}`,style:{
+        marginLeft:'auto',fontSize:'11px',padding:'2px 10px',borderRadius:'20px',
+        background:status?status.color+'22':'transparent',
+        color:status?status.color:'transparent',fontWeight:'600',
+        display: avg?'inline':'none',
+      }}, status?status.label:''),
+    ),
+    h('div',{style:{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}},
+      h('span',{style:{fontSize:'12px',color:'#64748b',flexShrink:'0'}},'🕐 計測時刻'),
+      timeEl,
+    ),
+    ...rows,
+    avgBlock,
+    h('div',{style:{marginTop:'10px'}},
+      h('div',{style:{fontSize:'12px',color:'#64748b',marginBottom:'4px'}},'📝 メモ'),
+      memoEl,
+    ),
+  );
+}
+
+// ── 印刷共通ヘルパー ───────────────────────────────────────────────
+function doPrint(html) {
+  const pa=document.getElementById('print-area');
+  pa.innerHTML=html;
+  document.getElementById('app').classList.add('no-print');
+  window.print();
+  document.getElementById('app').classList.remove('no-print');
+  pa.innerHTML='';
+}
+
+// ── 印刷：家族用（最良値・最悪値） ────────────────────────────────
+function printRecord(records, ym) {
+  const ymLabel=ym.replace('-','年')+'月';
+  const days=new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
+  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+
+  // 月平均（最良・最悪の平均で計算）
+  let sumAm={sys:0,dia:0,pulse:0,n:0}, sumPm={sys:0,dia:0,pulse:0,n:0};
+  for(let i=1;i<=days;i++){
+    const e=records[`${ym}-${String(i).padStart(2,'0')}`]; if(!e) continue;
+    const am=calcBestWorstAvg(e.am.readings), pm=calcBestWorstAvg(e.pm.readings);
+    if(am){sumAm.sys+=am.sys;sumAm.dia+=am.dia;sumAm.pulse+=am.pulse;sumAm.n++;}
+    if(pm){sumPm.sys+=pm.sys;sumPm.dia+=pm.dia;sumPm.pulse+=pm.pulse;sumPm.n++;}
+  }
+  const mAm=sumAm.n?{sys:Math.round(sumAm.sys/sumAm.n),dia:Math.round(sumAm.dia/sumAm.n),pulse:Math.round(sumAm.pulse/sumAm.n)}:null;
+  const mPm=sumPm.n?{sys:Math.round(sumPm.sys/sumPm.n),dia:Math.round(sumPm.dia/sumPm.n),pulse:Math.round(sumPm.pulse/sumPm.n)}:null;
+
+  const valCell=(v,bg)=>v
+    ?`<td style="padding:3px 5px;text-align:center;font-size:10px;font-weight:700;color:${colorOf(v.sys)};background:${bg}">${v.sys}</td><td style="padding:3px 4px;text-align:center;font-size:10px;background:${bg}">${v.dia}</td><td style="padding:3px 4px;text-align:center;font-size:10px;color:#c2410c;background:${bg}">${v.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#d1d5db;background:${bg};font-size:10px">—</td>`;
+  const avgCellStr=avg=>avg
+    ?`<td style="padding:3px 5px;text-align:center;font-weight:700;color:${colorOf(avg.sys)};font-size:11px">${avg.sys}</td><td style="padding:3px 4px;text-align:center;font-weight:600;font-size:11px">${avg.dia}</td><td style="padding:3px 4px;text-align:center;color:#c2410c;font-weight:600;font-size:11px">${avg.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#9ca3af;font-size:10px">—</td>`;
+
+  let rows='';
+  for(let i=1;i<=days;i++){
+    const d=`${ym}-${String(i).padStart(2,'0')}`;
+    const dow=['日','月','火','水','木','金','土'][new Date(d).getDay()];
+    const dowColor=new Date(d).getDay()===0?'#dc2626':new Date(d).getDay()===6?'#2563eb':'#374151';
+    const e=records[d]||null;
+    const amBest=e?calcBest(e.am.readings):null;  const amWorst=e?calcWorst(e.am.readings):null;
+    const pmBest=e?calcBest(e.pm.readings):null;  const pmWorst=e?calcWorst(e.pm.readings):null;
+    rows+=`<tr style="background:${i%2===0?'#f9fafb':'#fff'}">
+      <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;font-weight:600;color:${dowColor};white-space:nowrap;font-size:11px">${i}<span style="font-size:9px">(${dow})</span></td>
+      ${valCell(amBest,'#f0fdf4')}${valCell(amWorst,'#fff7ed')}<td style="border-left:2px solid #cbd5e1"></td>
+      ${valCell(pmBest,'#f0fdf4')}${valCell(pmWorst,'#fff7ed')}</tr>`;
+  }
+
+  doPrint(`<div style="width:186mm;font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1f2937;font-size:8.5pt;">
+    <div style="border-bottom:2.5pt solid #16a34a;padding-bottom:4mm;margin-bottom:4mm;display:flex;justify-content:space-between;align-items:flex-end;">
+      <div>
+        <div style="font-size:7pt;color:#6b7280;">血圧手帳 ／ 家族用</div>
+        <div style="font-size:15pt;font-weight:800;color:#14532d;">${ymLabel}　血圧記録（最良・最悪値）</div>
+      </div>
+      <div style="text-align:right;font-size:7pt;color:#6b7280;">
+        <div>氏名：＿＿＿＿＿＿＿＿＿＿</div>
+        <div style="margin-top:1mm;">印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:3mm;font-size:7pt;color:#6b7280;">単位：mmHg（脈拍：bpm）　<span style="color:#15803d;font-weight:600;">■緑＝最良値</span>　<span style="color:#d97706;font-weight:600;">■橙＝最悪値</span>　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:7.5pt;table-layout:fixed;">
+      <thead>
+        <tr style="background:#16a34a;color:white;">
+          <th style="padding:2mm 2mm;text-align:left;width:14mm;">日</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:1pt solid #4ade80;width:42mm;">🌅 朝　最良値</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:2pt solid #4ade80;width:42mm;">最悪値</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:1pt solid #4ade80;width:42mm;">🌙 夜　最良値</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;width:42mm;">最悪値</th>
+        </tr>
+        <tr style="background:#15803d;color:#bbf7d0;font-size:6.5pt;">
+          <th style="padding:1mm 2mm;"></th>
+          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:1pt solid #4ade80;">脈</th>
+          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:2pt solid #4ade80;">脈</th>
+          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:1pt solid #4ade80;">脈</th>
+          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;">脈</th>
+        </tr>
+      </thead>
+      <tbody>${rows}
+        <tr style="background:#f0fdf4;border-top:1.5pt solid #16a34a;">
+          <td style="padding:2mm 2mm;font-weight:700;color:#16a34a;font-size:7pt;">月平均</td>
+          <td colspan="3" style="border-right:1pt solid #cbd5e1;"></td>${avgCellStr(mAm)}
+          <td style="border-left:2pt solid #cbd5e1;"></td>
+          <td colspan="3"></td>${avgCellStr(mPm)}
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:5mm;border:0.5pt solid #d1d5db;border-radius:2mm;padding:3mm 4mm;">
+      <div style="font-size:7pt;font-weight:600;color:#374151;margin-bottom:5mm;">備考・メモ</div>
+      <div style="border-bottom:0.5pt solid #e5e7eb;margin-bottom:5mm;"></div>
+      <div style="border-bottom:0.5pt solid #e5e7eb;"></div>
+    </div>
+    <div style="margin-top:3mm;font-size:6.5pt;color:#9ca3af;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
+  </div>`);
+}
+
+// ── 印刷：医者用（収縮期最良の1回） ───────────────────────────────
+function printRecordDoctor(records, ym) {
+  const ymLabel=ym.replace('-','年')+'月';
+  const days=new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
+  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+
+  let sumAm={sys:0,dia:0,pulse:0,n:0}, sumPm={sys:0,dia:0,pulse:0,n:0};
+  for(let i=1;i<=days;i++){
+    const e=records[`${ym}-${String(i).padStart(2,'0')}`]; if(!e) continue;
+    const am=calcBest(e.am.readings), pm=calcBest(e.pm.readings);
+    if(am){sumAm.sys+=am.sys;sumAm.dia+=am.dia;sumAm.pulse+=am.pulse;sumAm.n++;}
+    if(pm){sumPm.sys+=pm.sys;sumPm.dia+=pm.dia;sumPm.pulse+=pm.pulse;sumPm.n++;}
+  }
+  const mAm=sumAm.n?{sys:Math.round(sumAm.sys/sumAm.n),dia:Math.round(sumAm.dia/sumAm.n),pulse:Math.round(sumAm.pulse/sumAm.n)}:null;
+  const mPm=sumPm.n?{sys:Math.round(sumPm.sys/sumPm.n),dia:Math.round(sumPm.dia/sumPm.n),pulse:Math.round(sumPm.pulse/sumPm.n)}:null;
+
+  const bestCell=b=>b
+    ?`<td style="padding:4px 6px;text-align:center;font-weight:700;color:${colorOf(b.sys)};font-size:12px">${b.sys}</td><td style="padding:4px 6px;text-align:center;font-size:12px">${b.dia}</td><td style="padding:4px 6px;text-align:center;color:#c2410c;font-size:12px">${b.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#d1d5db">—</td>`;
+
+  let rows='';
+  for(let i=1;i<=days;i++){
+    const d=`${ym}-${String(i).padStart(2,'0')}`;
+    const dow=['日','月','火','水','木','金','土'][new Date(d).getDay()];
+    const dowColor=new Date(d).getDay()===0?'#dc2626':new Date(d).getDay()===6?'#2563eb':'#374151';
+    const e=records[d]||null;
+    const am=e?calcBest(e.am.readings):null;
+    const pm=e?calcBest(e.pm.readings):null;
+    const amTime=e?.am?.time?`<span style="font-size:9px;color:#6b7280;margin-left:3px">🕐${e.am.time}</span>`:'';
+    const pmTime=e?.pm?.time?`<span style="font-size:9px;color:#6b7280;margin-left:3px">🕐${e.pm.time}</span>`:'';
+    const memo=[e?.am?.memo?`朝:${e.am.memo}`:'', e?.pm?.memo?`夜:${e.pm.memo}`:''].filter(Boolean).join(' / ');
+    rows+=`<tr style="background:${i%2===0?'#f9fafb':'#fff'}">
+      <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-weight:600;color:${dowColor};white-space:nowrap">${i}日<span style="font-size:10px;margin-left:2px">(${dow})</span></td>
+      <td style="padding:4px 3px;border-bottom:1px solid #e5e7eb;font-size:10px;color:#6b7280">${amTime}</td>
+      ${bestCell(am)}<td style="border-left:2px solid #e5e7eb;padding:4px 3px;font-size:10px;color:#6b7280">${pmTime}</td>${bestCell(pm)}
+      <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:9px;color:#64748b;max-width:80px">${memo}</td>
+    </tr>`;
+  }
+
+  doPrint(`<div style="width:186mm;font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1f2937;font-size:8.5pt;">
+    <div style="border-bottom:2.5pt solid #1e40af;padding-bottom:4mm;margin-bottom:4mm;display:flex;justify-content:space-between;align-items:flex-end;">
+      <div>
+        <div style="font-size:7pt;color:#6b7280;">血圧手帳 ／ 医療機関提出用</div>
+        <div style="font-size:15pt;font-weight:800;color:#1e3a8a;">${ymLabel}　血圧記録</div>
+      </div>
+      <div style="text-align:right;font-size:7pt;color:#6b7280;">
+        <div>氏名：＿＿＿＿＿＿＿＿＿＿</div>
+        <div style="margin-top:1mm;">印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:3mm;font-size:7pt;color:#6b7280;">単位：mmHg（脈拍：bpm）　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:8pt;table-layout:fixed;">
+      <thead>
+        <tr style="background:#1e40af;color:white;">
+          <th style="padding:2mm 2mm;text-align:left;width:16mm;">日付</th>
+          <th style="padding:2mm 1mm;text-align:center;width:14mm;font-size:6.5pt;color:#bfdbfe;">朝時刻</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:2pt solid #3b82f6;width:48mm;">🌅 朝</th>
+          <th style="padding:2mm 1mm;text-align:center;width:14mm;font-size:6.5pt;color:#bfdbfe;">夜時刻</th>
+          <th colspan="3" style="padding:2mm 1mm;text-align:center;width:48mm;">🌙 夜</th>
+          <th style="padding:2mm 1mm;text-align:center;width:30mm;font-size:6.5pt;color:#bfdbfe;">メモ</th>
+        </tr>
+        <tr style="background:#1e3a8a;color:#bfdbfe;font-size:6.5pt;">
+          <th style="padding:1mm 2mm;"></th>
+          <th style="padding:1mm;"></th>
+          <th style="padding:1mm;text-align:center;">収縮期</th><th style="padding:1mm;text-align:center;">拡張期</th><th style="padding:1mm;text-align:center;border-right:2pt solid #3b82f6;">脈拍</th>
+          <th style="padding:1mm;"></th>
+          <th style="padding:1mm;text-align:center;">収縮期</th><th style="padding:1mm;text-align:center;">拡張期</th><th style="padding:1mm;text-align:center;">脈拍</th>
+          <th style="padding:1mm;"></th>
+        </tr>
+      </thead>
+      <tbody>${rows}
+        <tr style="background:#eff6ff;border-top:1.5pt solid #1e40af;">
+          <td style="padding:2mm 2mm;font-weight:700;color:#1e40af;font-size:7pt;">月平均</td>
+          <td></td>${bestCell(mAm)}<td></td>${bestCell(mPm)}<td></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:5mm;border:0.5pt solid #d1d5db;border-radius:2mm;padding:3mm 4mm;">
+      <div style="font-size:7pt;font-weight:600;color:#374151;margin-bottom:5mm;">服薬・備考</div>
+      <div style="border-bottom:0.5pt solid #e5e7eb;margin-bottom:5mm;"></div>
+      <div style="border-bottom:0.5pt solid #e5e7eb;"></div>
+    </div>
+    <div style="margin-top:3mm;font-size:6.5pt;color:#9ca3af;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
+  </div>`);
+}
+
+// ── Share ──────────────────────────────────────────────────────────
+// calcFn: calcAvg または calcBest を受け取る汎用チャートビルダー
+function buildShareSVGChart(records, ym, calcFn) {
+  const src = ym === 'all' ? records : Object.fromEntries(Object.entries(records).filter(([d])=>d.startsWith(ym)));
+  const pts = Object.entries(src)
+    .sort(([a],[b])=>a.localeCompare(b)).slice(-31)
+    .map(([date,entry])=>({ date, amAvg:calcFn(entry.am.readings), pmAvg:calcFn(entry.pm.readings) }))
+    .filter(p=>p.amAvg||p.pmAvg);
+  if (pts.length < 2) return null;
+
+  const W=380, H=190, PL=40, PT=8, PR=24, PB=22;
+  const cW=W-PL-PR, cH=H-PT-PB;
+  // Y軸固定 50〜170、10刻み
+  const minV=50, maxV=170;
+  const ticks=[50,60,70,80,90,100,110,120,130,140,150,160,170];
+  const xS=i=>PL+(i/(pts.length-1))*cW;
+  const yS=v=>PT+cH-((v-minV)/(maxV-minV))*cH;
+  const mkPath=g=>{ const vp=pts.map((p,i)=>({i,v:g(p)})).filter(x=>x.v!=null); return vp.length?vp.map((x,j)=>`${j===0?'M':'L'}${xS(x.i).toFixed(1)},${yS(x.v).toFixed(1)}`).join(' '):''; };
+
+  // SVG本体
+  let svgBody=`<rect width="${W}" height="${H}" fill="white"/>`;
+  ticks.forEach(t=>{
+    const isKey=t===120||t===140;
+    svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(t).toFixed(1)}" y2="${yS(t).toFixed(1)}" stroke="${isKey?'#e2e8f0':'#f1f5f9'}" stroke-width="1"/>`;
+    svgBody+=`<text x="${PL-4}" y="${(yS(t)+4).toFixed(1)}" text-anchor="end" font-size="8" fill="${isKey?'#64748b':'#94a3b8'}"${isKey?' font-weight="bold"':''}>${t}</text>`;
+  });
+  // 125目標線（上・緑点線）
+  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(125).toFixed(1)}" y2="${yS(125).toFixed(1)}" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+  svgBody+=`<text x="${PL+cW+3}" y="${(yS(125)+4).toFixed(1)}" font-size="8" fill="#16a34a" font-weight="bold">125</text>`;
+  // 75目標線（下・青点線）
+  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(75).toFixed(1)}" y2="${yS(75).toFixed(1)}" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+  svgBody+=`<text x="${PL+cW+3}" y="${(yS(75)+4).toFixed(1)}" font-size="8" fill="#2563eb" font-weight="bold">75</text>`;
+  // データ線（収縮期・拡張期のみ）
+  [[p=>p.amAvg?.sys,'#3b82f6','2',''],[p=>p.pmAvg?.sys,'#3b82f6','2','5,3'],
+   [p=>p.amAvg?.dia,'#06b6d4','1.5',''],[p=>p.pmAvg?.dia,'#06b6d4','1.5','5,3'],
+  ].forEach(([g,c,w,d])=>{ const p=mkPath(g); if(!p) return;
+    svgBody+=`<path d="${p}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linejoin="round"${d?` stroke-dasharray="${d}"`:''}/>`; });
+  pts.forEach((p,i)=>{ if(i!==0&&i!==pts.length-1&&i%Math.ceil(pts.length/4)!==0) return;
+    const d=new Date(p.date); svgBody+=`<text x="${xS(i).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="8" fill="#94a3b8">${d.getMonth()+1}/${d.getDate()}</text>`; });
+
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${svgBody}</svg>`;
+
+  // 凡例HTML
+  const legendItems=[
+    ['#3b82f6','','収縮期（朝・実線）'],
+    ['#3b82f6','5,3','収縮期（夜・点線）'],
+    ['#06b6d4','','拡張期（朝・実線）'],
+    ['#06b6d4','5,3','拡張期（夜・点線）'],
+    ['#4ade80','4,3','目標（上） 125'],
+    ['#60a5fa','4,3','目標（下） 75'],
+  ];
+  const legendHtml=legendItems.map(([c,d,lbl])=>{
+    const w=d?'1.5':'2';
+    return `<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#475569;white-space:nowrap"><svg width="22" height="10" viewBox="0 0 22 10" style="flex-shrink:0;display:block"><line x1="0" y1="5" x2="22" y2="5" stroke="${c}" stroke-width="${w}"${d?` stroke-dasharray="${d}"`:''}></line></svg>${lbl}</div>`;
+  }).join('');
+
+  return `<div style="background:white;border-radius:8px;overflow:hidden">
+    ${svg}
+    <div style="display:flex;flex-wrap:wrap;gap:5px 12px;padding:8px 10px;background:#f8fafc;border-top:1px solid #e2e8f0">
+      ${legendHtml}
+    </div>
+  </div>`;
+}
+
+// 共有共通処理
+async function doShare(wrap, ymLabel) {
+  const sa=document.getElementById('share-area');
+  sa.innerHTML='';
+  sa.appendChild(wrap);
+
+  const loading=document.createElement('div');
+  loading.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  loading.innerHTML='<div style="background:white;border-radius:12px;padding:24px 32px;font-size:15px;font-weight:600;color:#1e293b;">📷 画像を生成中...</div>';
+  document.body.appendChild(loading);
+  try {
+    const canvas=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:'#f1f5f9',logging:false});
+    sa.innerHTML=''; document.body.removeChild(loading);
+    canvas.toBlob(async blob=>{
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([blob],'bp.png',{type:'image/png'})]})){
+        await navigator.share({title:`血圧記録 ${ymLabel}`,text:`${ymLabel}の血圧記録です`,files:[new File([blob],`血圧記録_${ymLabel}.png`,{type:'image/png'})]});
+      } else {
+        const url=URL.createObjectURL(blob); const a=document.createElement('a');
+        a.href=url; a.download=`血圧記録_${ymLabel}.png`; a.click(); URL.revokeObjectURL(url);
+        alert('画像をダウンロードしました。\nLINEやメールに添付してお使いください。');
+      }
+    },'image/png');
+  } catch(e){ sa.innerHTML=''; document.body.removeChild(loading); alert('画像生成に失敗しました。'); }
+}
+
+// ── 共有：家族用（最良・最悪値＋その平均グラフ） ──────────────────
+async function shareFamily(records, ym) {
+  const ymLabel=ym==='all'?'直近30日':ym.replace('-','年')+'月';
+  const days=ym==='all'?0:new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
+  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+
+  const wrap=document.createElement('div');
+  wrap.style.cssText='width:420px;background:#f1f5f9;padding:12px;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;';
+
+  // ヘッダー（緑）
+  const hdr=document.createElement('div');
+  hdr.style.cssText='background:linear-gradient(135deg,#15803d,#22c55e);border-radius:12px;padding:14px 16px;color:white;margin-bottom:10px;';
+  hdr.innerHTML=`<div style="font-size:11px;opacity:0.8">血圧手帳 ／ 家族用</div><div style="font-size:18px;font-weight:800">${ymLabel}　血圧記録（最良・最悪値）</div><div style="font-size:10px;opacity:0.7;margin-top:2px">作成日：${new Date().toLocaleDateString('ja-JP')}</div>`;
+  wrap.appendChild(hdr);
+
+  // グラフ（最良・最悪の平均）
+  const svgStr=buildShareSVGChart(records,ym,calcBestWorstAvg);
+  if(svgStr){ const cb=document.createElement('div'); cb.style.cssText='margin-bottom:10px;'; cb.innerHTML=`<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:6px;padding:0 2px;">📈 推移グラフ（最良・最悪の平均値）</div>${svgStr}`; wrap.appendChild(cb); }
+
+  // 一覧表（最良値・最悪値の2列）
+  if(ym!=='all'){
+    const valCell=(v,bg)=>v
+      ?`<td style="padding:3px 3px;text-align:center;font-size:10px;font-weight:700;color:${colorOf(v.sys)};background:${bg}">${v.sys}</td><td style="padding:3px 2px;text-align:center;font-size:10px;background:${bg}">${v.dia}</td><td style="padding:3px 2px;text-align:center;font-size:10px;color:#c2410c;background:${bg}">${v.pulse}</td>`
+      :`<td colspan="3" style="text-align:center;color:#d1d5db;font-size:10px;background:${bg}">—</td>`;
+
+    let tbl=`<div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:4px;">📋 月次記録（単位：mmHg / bpm）</div>
+    <div style="font-size:9px;color:#6b7280;margin-bottom:6px;">収縮期（上）が最も低い値（最良）と最も高い値（最悪）</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9px"><thead>
+      <tr style="background:#15803d;color:white">
+        <th rowspan="2" style="padding:3px;text-align:left;font-size:9px">日</th>
+        <th colspan="6" style="padding:3px;text-align:center;font-size:9px;border-right:1px solid #4ade80">🌅 朝</th>
+        <th colspan="6" style="padding:3px;text-align:center;font-size:9px">🌙 夜</th>
+      </tr>
+      <tr style="background:#166534;color:#bbf7d0;font-size:8px">
+        <th colspan="3" style="padding:2px;text-align:center;border-right:1px solid #4ade80;background:#14532d">最良値</th>
+        <th colspan="3" style="padding:2px;text-align:center;border-right:1px solid #4ade80">最悪値</th>
+        <th colspan="3" style="padding:2px;text-align:center;border-right:1px solid #4ade80;background:#14532d">最良値</th>
+        <th colspan="3" style="padding:2px;text-align:center">最悪値</th>
+      </tr></thead><tbody>`;
+    for(let i=1;i<=days;i++){
+      const d=`${ym}-${String(i).padStart(2,'0')}`; const e=records[d]||null;
+      const amBest=e?calcBest(e.am.readings):null;  const amWorst=e?calcWorst(e.am.readings):null;
+      const pmBest=e?calcBest(e.pm.readings):null;  const pmWorst=e?calcWorst(e.pm.readings):null;
+      tbl+=`<tr style="background:${i%2===0?'#f9fafb':'white'}">
+        <td style="padding:2px 3px;font-weight:600;font-size:9px">${i}日</td>
+        ${valCell(amBest,'#f0fdf4')}${valCell(amWorst,'#fff7ed')}
+        ${valCell(pmBest,'#f0fdf4')}${valCell(pmWorst,'#fff7ed')}
+      </tr>`;
+    }
+    tbl+=`</tbody></table>
+    <div style="margin-top:6px;font-size:9px;display:flex;gap:10px;flex-wrap:wrap">
+      ${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600">●${l}</span>`).join('')}
+      <span style="color:#15803d;font-weight:600">■最良</span><span style="color:#d97706;font-weight:600">■最悪</span>
+    </div>`;
+    const tb=document.createElement('div'); tb.style.cssText='background:white;border-radius:12px;padding:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);'; tb.innerHTML=tbl; wrap.appendChild(tb);
+  }
+  const ftr=document.createElement('div'); ftr.style.cssText='text-align:center;font-size:10px;color:#94a3b8;margin-top:8px;'; ftr.textContent='血圧手帳アプリより共有（家族用）'; wrap.appendChild(ftr);
+  await doShare(wrap, ymLabel);
+}
+
+// ── 共有：医者用（最良値＋最良値グラフ） ──────────────────────────
+async function shareDoctor(records, ym) {
+  const ymLabel=ym==='all'?'直近30日':ym.replace('-','年')+'月';
+  const days=ym==='all'?0:new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
+  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+
+  const wrap=document.createElement('div');
+  wrap.style.cssText='width:420px;background:#f1f5f9;padding:12px;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;';
+
+  // ヘッダー（青）
+  const hdr=document.createElement('div');
+  hdr.style.cssText='background:linear-gradient(135deg,#1e40af,#3b82f6);border-radius:12px;padding:14px 16px;color:white;margin-bottom:10px;';
+  hdr.innerHTML=`<div style="font-size:11px;opacity:0.8">血圧手帳 ／ 医療機関提出用</div><div style="font-size:18px;font-weight:800">${ymLabel}　血圧記録</div><div style="font-size:10px;opacity:0.7;margin-top:2px">作成日：${new Date().toLocaleDateString('ja-JP')}</div>`;
+  wrap.appendChild(hdr);
+
+  // グラフ
+  const svgStr=buildShareSVGChart(records,ym,calcBest);
+  if(svgStr){ const cb=document.createElement('div'); cb.style.cssText='margin-bottom:10px;'; cb.innerHTML=`<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:6px;padding:0 2px;">📈 推移グラフ</div>${svgStr}`; wrap.appendChild(cb); }
+
+  // 一覧表
+  if(ym!=='all'){
+    const bestCell=b=>b?`<td style="padding:3px 4px;text-align:center;font-size:10px;font-weight:700;color:${colorOf(b.sys)}">${b.sys}</td><td style="padding:3px 3px;text-align:center;font-size:10px">${b.dia}</td><td style="padding:3px 3px;text-align:center;font-size:10px;color:#c2410c">${b.pulse}</td>`:`<td colspan="3" style="text-align:center;color:#d1d5db;font-size:10px">—</td>`;
+    let tbl=`<div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:6px;">📋 月次記録（単位：mmHg / bpm）</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px"><thead>
+      <tr style="background:#1e40af;color:white">
+        <th rowspan="2" style="padding:4px 5px;text-align:left">日</th>
+        <th colspan="3" style="padding:4px;text-align:center;border-right:1px solid #3b82f6">🌅 朝</th>
+        <th colspan="3" style="padding:4px;text-align:center">🌙 夜</th>
+      </tr>
+      <tr style="background:#1e3a8a;color:#bfdbfe;font-size:9px">
+        <th style="padding:3px;text-align:center">収縮期</th><th style="padding:3px;text-align:center">拡張期</th><th style="padding:3px;text-align:center;border-right:1px solid #3b82f6">脈拍</th>
+        <th style="padding:3px;text-align:center">収縮期</th><th style="padding:3px;text-align:center">拡張期</th><th style="padding:3px;text-align:center">脈拍</th>
+      </tr></thead><tbody>`;
+    for(let i=1;i<=days;i++){
+      const d=`${ym}-${String(i).padStart(2,'0')}`; const e=records[d]||null;
+      const am=e?calcBest(e.am.readings):null; const pm=e?calcBest(e.pm.readings):null;
+      tbl+=`<tr style="background:${i%2===0?'#f9fafb':'white'}"><td style="padding:3px 5px;font-weight:600;font-size:10px">${i}日</td>${bestCell(am)}${bestCell(pm)}</tr>`;
+    }
+    tbl+=`</tbody></table><div style="margin-top:6px;font-size:9px">${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600">●${l} </span>`).join('')}</div>`;
+    const tb=document.createElement('div'); tb.style.cssText='background:white;border-radius:12px;padding:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);'; tb.innerHTML=tbl; wrap.appendChild(tb);
+  }
+  const ftr=document.createElement('div'); ftr.style.cssText='text-align:center;font-size:10px;color:#94a3b8;margin-top:8px;'; ftr.textContent='血圧手帳アプリより共有（医療機関提出用）'; wrap.appendChild(ftr);
+  await doShare(wrap, ymLabel);
+}
+
+// ── Export ─────────────────────────────────────────────────────────
+function buildCSVText(records) {
+  const rows = [
+    ['日付','朝時刻','朝1回_上','朝1回_下','朝1回_脈','朝2回_上','朝2回_下','朝2回_脈','朝3回_上','朝3回_下','朝3回_脈','朝平均_上','朝平均_下','朝平均_脈','朝メモ',
+     '夜時刻','夜1回_上','夜1回_下','夜1回_脈','夜2回_上','夜2回_下','夜2回_脈','夜3回_上','夜3回_下','夜3回_脈','夜平均_上','夜平均_下','夜平均_脈','夜メモ']
+  ];
+  Object.entries(records).sort(([a],[b])=>a.localeCompare(b)).forEach(([date,entry])=>{
+    const amAvg=calcAvg(entry.am.readings), pmAvg=calcAvg(entry.pm.readings);
+    const r=entry.am.readings, s=entry.pm.readings;
+    rows.push([
+      date, entry.am.time||'',
+      r[0]?.sys||'',r[0]?.dia||'',r[0]?.pulse||'',
+      r[1]?.sys||'',r[1]?.dia||'',r[1]?.pulse||'',
+      r[2]?.sys||'',r[2]?.dia||'',r[2]?.pulse||'',
+      amAvg?.sys||'',amAvg?.dia||'',amAvg?.pulse||'', entry.am.memo||'',
+      entry.pm.time||'',
+      s[0]?.sys||'',s[0]?.dia||'',s[0]?.pulse||'',
+      s[1]?.sys||'',s[1]?.dia||'',s[1]?.pulse||'',
+      s[2]?.sys||'',s[2]?.dia||'',s[2]?.pulse||'',
+      pmAvg?.sys||'',pmAvg?.dia||'',pmAvg?.pulse||'', entry.pm.memo||'',
+    ]);
+  });
+  return rows.map(r=>r.join(',')).join('\n');
+}
+
+function showDataModal(title, text) {
+  // 既存のモーダルがあれば削除
+  const existing = document.getElementById('export-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'export-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:12px;';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:14px;padding:16px;width:100%;max-height:90vh;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+
+  const ttl = document.createElement('div');
+  ttl.style.cssText = 'font-weight:700;font-size:15px;color:#1e293b;';
+  ttl.textContent = title;
+
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:#64748b;background:#f0f9ff;border-radius:8px;padding:8px 10px;line-height:1.7;';
+  note.innerHTML = '① <b>全てコピー</b>ボタンを押す<br>② Googleドライブのメモやメールに貼り付けて保存';
+
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.readOnly = true;
+  ta.style.cssText = 'flex:1;min-height:140px;max-height:200px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:10px;font-family:monospace;resize:none;color:#374151;background:#f8fafc;-webkit-user-select:all;user-select:all;';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = '📋 全てコピー';
+  copyBtn.style.cssText = 'padding:14px;background:#0891b2;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;';
+
+  copyBtn.addEventListener('click', function() {
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch(e) {}
+    if (!ok && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(()=>{});
+      ok = true;
+    }
+    copyBtn.textContent = ok ? '✅ コピーしました！' : '⚠️ テキストを長押しして全選択→コピー';
+    copyBtn.style.background = ok ? '#16a34a' : '#d97706';
+    if (ok) setTimeout(()=>{ copyBtn.textContent='📋 全てコピー'; copyBtn.style.background='#0891b2'; }, 3000);
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '閉じる';
+  closeBtn.style.cssText = 'padding:12px;background:#f1f5f9;color:#475569;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;';
+  closeBtn.addEventListener('click', function() { overlay.remove(); });
+
+  box.appendChild(ttl);
+  box.appendChild(note);
+  box.appendChild(ta);
+  box.appendChild(copyBtn);
+  box.appendChild(closeBtn);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', function(e) { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); }, 300);
+}
+
+function exportCSV(records) {
+  if (!Object.keys(records).length) { alert('記録がありません。'); return; }
+  showDataModal('📊 CSVエクスポート', buildCSVText(records));
+}
+
+function exportJSON(records) {
+  if (!Object.keys(records).length) { alert('記録がありません。'); return; }
+  showDataModal('📦 JSONバックアップ', JSON.stringify(records));
+}
+
+function importJSON(records, onDone) {
+  const existing = document.getElementById('import-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'import-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:12px;';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:14px;padding:16px;width:100%;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+
+  const ttl = document.createElement('div');
+  ttl.style.cssText = 'font-weight:700;font-size:15px;color:#1e293b;';
+  ttl.textContent = '📥 JSONインポート';
+
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:#64748b;background:#fff7ed;border-radius:8px;padding:8px 10px;line-height:1.6;';
+  note.textContent = 'バックアップ時にコピーしたJSONテキストを下に貼り付けてください。';
+
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'ここにJSONテキストを貼り付け...';
+  ta.style.cssText = 'height:150px;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px;font-size:11px;font-family:monospace;resize:none;color:#374151;outline:none;';
+
+  const importBtn = document.createElement('button');
+  importBtn.textContent = '📥 インポート実行';
+  importBtn.style.cssText = 'padding:14px;background:#d97706;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;';
+  importBtn.addEventListener('click', function() {
+    try {
+      const imported = JSON.parse(ta.value.trim());
+      const merged = Object.assign({}, records, imported);
+      saveRecords(merged);
+      state.records = merged;
+      overlay.remove();
+      alert('✅ インポート完了\n' + Object.keys(imported).length + '日分のデータを読み込みました。');
+      onDone();
+    } catch(e) {
+      alert('❌ JSONの形式が正しくありません。\nバックアップ時のテキストをそのまま貼り付けてください。');
+    }
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'キャンセル';
+  closeBtn.style.cssText = 'padding:12px;background:#f1f5f9;color:#475569;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;';
+  closeBtn.addEventListener('click', function() { overlay.remove(); });
+
+  box.appendChild(ttl); box.appendChild(note); box.appendChild(ta);
+  box.appendChild(importBtn); box.appendChild(closeBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+// ── Main Render ────────────────────────────────────────────────────
+function render() {
+  const app=document.getElementById('app');
+  app.innerHTML='';
+
+  const { tab, date, records, chartMonth } = state;
+  const entry=records[date]||defaultEntry();
+  const availableMonths=[...new Set(Object.keys(records).map(d=>d.slice(0,7)))].sort().reverse();
+
+  // Header
+  app.appendChild(h('div',{style:{background:'linear-gradient(135deg,#1e40af 0%,#3b82f6 100%)',padding:'20px 20px 16px',color:'white'}},
+    h('div',{style:{fontSize:'12px',opacity:'0.8',marginBottom:'2px'}},'血圧手帳'),
+    h('div',{style:{fontSize:'22px',fontWeight:'800',letterSpacing:'-0.5px'}},'Blood Pressure'),
+  ));
+
+  // Tabs
+  const tabBar=h('div',{style:{display:'flex',background:'white',borderBottom:'1px solid #e2e8f0'}});
+  [['input','📝 入力'],['chart','📈 グラフ'],['table','📋 一覧表']].forEach(([t,l])=>{
+    const btn=h('button',{style:{
+      flex:'1',padding:'12px 0',border:'none',background:'transparent',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',
+      fontWeight:tab===t?'700':'500',color:tab===t?'#3b82f6':'#94a3b8',
+      borderBottom:tab===t?'2.5px solid #3b82f6':'2.5px solid transparent',
+    }},l);
+    btn.addEventListener('click',()=>{ state.tab=t; render(); });
+    tabBar.appendChild(btn);
+  });
+  app.appendChild(tabBar);
+
+  const body=h('div',{style:{padding:'16px'}});
+  app.appendChild(body);
+
+  // エクスポート・インポートパネル（常に表示）
+  const exportFooter=document.createElement('div');
+  exportFooter.style.cssText='padding:0 16px 16px;';
+  const exportPanel=document.createElement('div');
+  exportPanel.style.cssText='background:white;border-radius:16px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);';
+  exportPanel.innerHTML='<div style="font-weight:700;color:#1e293b;font-size:13px;margin-bottom:10px;">💾 データの保存・移行</div><div style="font-size:11px;color:#64748b;margin-bottom:12px;line-height:1.6;">JSONバックアップで定期的に保存しておきましょう。</div>';
+  const exportBtnRow=document.createElement('div');
+  exportBtnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;';
+  const csvBtn=document.createElement('button');
+  csvBtn.textContent='📊 CSV保存';
+  csvBtn.style.cssText='flex:1;min-width:100px;padding:10px 8px;background:#0891b2;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  csvBtn.addEventListener('click',function(){ exportCSV(state.records); });
+  const jsonBtn=document.createElement('button');
+  jsonBtn.textContent='📦 JSONバックアップ';
+  jsonBtn.style.cssText='flex:1;min-width:100px;padding:10px 8px;background:#7c3aed;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  jsonBtn.addEventListener('click',function(){ exportJSON(state.records); });
+  const importBtn2=document.createElement('button');
+  importBtn2.textContent='📥 JSONインポート';
+  importBtn2.style.cssText='flex:1;min-width:100px;padding:10px 8px;background:#d97706;color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+  importBtn2.addEventListener('click',function(){ importJSON(state.records,render); });
+  exportBtnRow.appendChild(csvBtn);
+  exportBtnRow.appendChild(jsonBtn);
+  exportBtnRow.appendChild(importBtn2);
+  exportPanel.appendChild(exportBtnRow);
+  exportFooter.appendChild(exportPanel);
+  app.appendChild(exportFooter);
+
+  // ── INPUT TAB ──
+  if(tab==='input'){
+    const dateInput=h('input',{type:'date',value:date,style:{border:'none',fontSize:'16px',fontWeight:'700',color:'#1e293b',background:'transparent',fontFamily:'inherit',outline:'none',flex:'1'}});
+    dateInput.addEventListener('change',e=>{ state.date=e.target.value; render(); });
+    body.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px',background:'white',borderRadius:'12px',padding:'12px 14px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}},
+      h('span',{style:{fontSize:'16px'}},'📅'),
+      dateInput,
+    ));
+
+    const makeOnChange=(period)=>(idx,field,value)=>{
+      if(!state.records[state.date]) state.records[state.date]=defaultEntry();
+      state.records[state.date][period].readings[idx][field]=value;
+      saveRecords(state.records);
+      const previewId=`preview-${period}-${idx}`;
+      const prev=document.getElementById(previewId);
+      const r=state.records[state.date][period].readings[idx];
+      if(prev){
+        const filled=r.sys!=='';
+        prev.style.display=filled?'flex':'none';
+        if(filled){
+          prev.querySelector('[data-f=sys]').textContent=r.sys;
+          prev.querySelector('[data-f=dia]').textContent=r.dia;
+          prev.querySelector('[data-f=pulse]').textContent=r.pulse;
+        }
+      }
+      const avgId=`avg-${period}`;
+      const avgEl=document.getElementById(avgId);
+      if(avgEl){
+        const avg=calcAvg(state.records[state.date][period].readings);
+        if(avg){
+          const st=statusOf(avg.sys);
+          avgEl.style.display='flex';
+          avgEl.querySelector('[data-f=sys]').textContent=avg.sys;
+          avgEl.querySelector('[data-f=sys]').style.color=st.color;
+          avgEl.querySelector('[data-f=dia]').textContent=avg.dia;
+          avgEl.querySelector('[data-f=pulse]').textContent=avg.pulse;
+          const badge=document.getElementById(`badge-${period}`);
+          if(badge){badge.textContent=st.label;badge.style.color=st.color;badge.style.background=st.color+'22';}
+        } else {
+          avgEl.style.display='none';
+        }
+      }
+    };
+
+    const makeOnMeta=(period)=>(field,value)=>{
+      if(!state.records[state.date]) state.records[state.date]=defaultEntry();
+      state.records[state.date][period][field]=value;
+      saveRecords(state.records);
+    };
+
+    body.appendChild(renderSession('朝の計測','🌅', entry.am, makeOnChange('am'), makeOnMeta('am'), 'am'));
+    body.appendChild(renderSession('夜の計測','🌙', entry.pm, makeOnChange('pm'), makeOnMeta('pm'), 'pm'));
+    body.appendChild(h('div',{style:{fontSize:'11px',color:'#94a3b8',textAlign:'center',marginTop:'4px'}},'※ 入力した数値は自動で保存されます'));
+  }
+
+  // ── CHART TAB ──
+  if(tab==='chart'){
+    const monthSel=h('select',{style:{border:'1.5px solid #e2e8f0',borderRadius:'8px',padding:'4px 8px',fontSize:'12px',fontFamily:'inherit',color:'#475569',background:'white',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%2394a3b8\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 8px center',paddingRight:'24px'}});
+    (availableMonths.length>0?availableMonths:[chartMonth]).forEach(m=>{
+      const o=h('option',{value:m},m.replace('-','年')+'月'); if(m===chartMonth) o.selected=true; monthSel.appendChild(o);
+    });
+    const allOpt=h('option',{value:'all'},'全期間（直近30日）'); if(chartMonth==='all') allOpt.selected=true; monthSel.appendChild(allOpt);
+    monthSel.addEventListener('change',e=>{ state.chartMonth=e.target.value; render(); });
+
+    const filteredRec=chartMonth==='all'?records:Object.fromEntries(Object.entries(records).filter(([d])=>d.startsWith(chartMonth)));
+
+    body.appendChild(h('div',{style:{background:'white',borderRadius:'16px',padding:'16px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',marginBottom:'12px'}},
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}},
+        h('span',{style:{fontWeight:'700',color:'#1e293b'}},'推移グラフ'),
+        h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
+          monthSel,
+          h('button',{style:{padding:'4px 8px',background:'#15803d',color:'white',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareFamily(state.records,state.chartMonth)},'👨‍👩‍👧 家族'),
+          h('button',{style:{padding:'4px 8px',background:'#1e40af',color:'white',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareDoctor(state.records,state.chartMonth)},'🏥 医者'),
+        ),
+      ),
+      renderChart(filteredRec),
+    ));
+
+    body.appendChild(h('div',{style:{fontWeight:'700',color:'#475569',fontSize:'13px',marginBottom:'10px'}},'直近の記録'));
+    const sorted=Object.entries(records).sort(([a],[b])=>b.localeCompare(a)).slice(0,7);
+    if(sorted.length===0){
+      body.appendChild(h('div',{style:{textAlign:'center',color:'#94a3b8',padding:'2rem',fontSize:'14px'}},'まだ記録がありません'));
+    } else {
+      sorted.forEach(([d,ent])=>{
+        const amAvg=calcAvg(ent.am.readings), pmAvg=calcAvg(ent.pm.readings);
+        const status=amAvg?statusOf(amAvg.sys):null;
+        const pairs=[['🌅 朝',amAvg,'am'],['🌙 夜',pmAvg,'pm']].filter(([,a])=>a);
+        body.appendChild(h('div',{style:{background:'white',borderRadius:'12px',padding:'12px 14px',marginBottom:'8px',boxShadow:'0 1px 3px rgba(0,0,0,0.05)',borderLeft:`4px solid ${status?.color||'#e2e8f0'}`}},
+          h('div',{style:{fontWeight:'600',fontSize:'13px',color:'#475569',marginBottom:'8px'}},formatDate(d)),
+          h('div',{style:{display:'flex',gap:'16px',flexWrap:'wrap'}},
+            ...pairs.map(([lbl,avg,period])=>h('div',{},
+              h('div',{style:{fontSize:'10px',color:'#94a3b8',marginBottom:'2px'}},
+                lbl,
+                ent[period]?.time ? h('span',{style:{marginLeft:'6px',color:'#64748b'}},'🕐'+ent[period].time) : null,
+              ),
+              h('span',{style:{fontWeight:'700',color:statusOf(avg.sys).color}},String(avg.sys)),
+              h('span',{style:{color:'#cbd5e1'}},'/'),
+              h('span',{style:{color:'#475569'}},String(avg.dia)),
+              h('span',{style:{fontSize:'10px',color:'#94a3b8'}},' mmHg '),
+              h('span',{style:{color:'#f97316',fontSize:'12px'}},String(avg.pulse)),
+              h('span',{style:{fontSize:'10px',color:'#94a3b8'}},' bpm'),
+            ))
+          ),
+          (ent.am?.memo||ent.pm?.memo) ? h('div',{style:{marginTop:'6px',fontSize:'11px',color:'#64748b',background:'#f8fafc',borderRadius:'6px',padding:'4px 8px'}},
+            ent.am?.memo ? h('span',{},'🌅 '+ent.am.memo) : null,
+            ent.am?.memo && ent.pm?.memo ? h('span',{style:{margin:'0 6px',color:'#cbd5e1'}},'|') : null,
+            ent.pm?.memo ? h('span',{},'🌙 '+ent.pm.memo) : null,
+          ) : null,
+        ));
+      });
+    }
+  }
+
+  // ── TABLE TAB ──
+  if(tab==='table'){
+    // chartMonthがavailableMonthsに含まれない場合は先頭月に補正
+    const tableMonth = availableMonths.includes(chartMonth) ? chartMonth : (availableMonths[0] || chartMonth);
+
+    const sel=h('select',{style:{border:'1.5px solid #e2e8f0',borderRadius:'8px',padding:'4px 10px',fontSize:'13px',fontFamily:'inherit',color:'#475569',background:'white',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%2394a3b8\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 8px center',paddingRight:'24px'}});
+    (availableMonths.length>0?availableMonths:[tableMonth]).forEach(m=>{
+      const o=h('option',{value:m},m.replace('-','年')+'月');
+      if(m===tableMonth) o.selected=true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change',e=>{ state.chartMonth=e.target.value; render(); });
+
+    body.appendChild(h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'14px'}},
+      h('span',{style:{fontWeight:'700',color:'#1e293b',fontSize:'15px'}},'月次一覧表'),
+      h('div',{style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}},
+        sel,
+        h('button',{style:{padding:'6px 10px',background:'#15803d',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareFamily(state.records,tableMonth)},'👨‍👩‍👧 家族共有'),
+        h('button',{style:{padding:'6px 10px',background:'#1e40af',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareDoctor(state.records,tableMonth)},'🏥 医者共有'),
+        h('button',{style:{padding:'6px 10px',background:'#374151',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>printRecord(state.records,tableMonth)},'🖨️ 家族印刷'),
+        h('button',{style:{padding:'6px 10px',background:'#1e3a8a',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>printRecordDoctor(state.records,tableMonth)},'🏥 医者印刷'),
+      ),
+    ));
+    body.appendChild(h('div',{style:{background:'white',borderRadius:'16px',padding:'14px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}},
+      h('div',{style:{textAlign:'center',fontWeight:'700',color:'#1e293b',marginBottom:'12px',fontSize:'14px'}},`${tableMonth.replace('-','年')}月　血圧記録（朝・夜 3回平均）`),
+      renderTable(records, tableMonth),
+      h('div',{style:{marginTop:'12px',display:'flex',gap:'12px',flexWrap:'wrap',justifyContent:'center'}},
+        ...[ ['正常','#22c55e'],['正常高値','#84cc16'],['高値血圧','#f59e0b'],['高血圧','#ef4444'] ].map(([lbl,col])=>
+          h('div',{style:{display:'flex',alignItems:'center',gap:'4px'}},
+            h('div',{style:{width:'10px',height:'10px',borderRadius:'50%',background:col}}),
+            h('span',{style:{fontSize:'10px',color:'#64748b'}},lbl),
+          )
+        ),
+      ),
+    ));
+    body.appendChild(h('div',{style:{marginTop:'12px',fontSize:'11px',color:'#94a3b8',textAlign:'center'}},'表の数値は3回計測の平均値です（mmHg）'));
+  }
+}
+
+// Optimised: re-render only session blocks on input change
+function renderSessionsOnly(body, changedPeriod) {
+  saveRecords(state.records);
+  // full re-render of input tab is fast enough for mobile
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
