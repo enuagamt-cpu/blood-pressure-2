@@ -401,10 +401,14 @@ function renderSession(label, icon, data, onChange, onMeta, period) {
 // ── 印刷共通ヘルパー ───────────────────────────────────────────────
 function doPrint(html) {
   const pa=document.getElementById('print-area');
+  const appEl=document.getElementById('app');
+  const footerEl=document.getElementById('export-footer');
   pa.innerHTML=html;
-  document.getElementById('app').classList.add('no-print');
+  if(appEl) appEl.style.display='none';
+  if(footerEl) footerEl.style.display='none';
   window.print();
-  document.getElementById('app').classList.remove('no-print');
+  if(appEl) appEl.style.display='';
+  if(footerEl) footerEl.style.display='';
   pa.innerHTML='';
 }
 
@@ -951,6 +955,7 @@ function render() {
 
   // エクスポート・インポートパネル（常に表示）
   const exportFooter=document.createElement('div');
+  exportFooter.id='export-footer';
   exportFooter.style.cssText='padding:0 16px 16px;';
   const exportPanel=document.createElement('div');
   exportPanel.style.cssText='background:white;border-radius:16px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);';
