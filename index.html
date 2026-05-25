@@ -19,32 +19,11 @@
   input[type=number] { -moz-appearance: textfield; }
   select { -webkit-appearance: none; appearance: none; }
 
-  /* ── 印刷用スタイル ── */
+  /* ── 印刷用スタイル（画像印刷のため最小限） ── */
   @media print {
-    @page { size: A4 portrait; margin: 10mm 12mm; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    body { background: white !important; margin: 0; padding: 0; }
-    #app, #export-footer { display: none !important; }
-    .no-print { display: none !important; }
-    #print-area {
-      display: block !important;
-      width: 186mm !important;
-      max-width: 186mm !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      font-family: 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif;
-      font-size: 9pt;
-      color: #000;
-    }
-    #print-area table {
-      width: 100% !important;
-      table-layout: fixed;
-    }
-    #print-area td, #print-area th {
-      padding: 2px 3px !important;
-    }
+    @page { size: A4 portrait; margin: 0; }
+    body { margin: 0; padding: 0; }
   }
-  .print-only { display: none; }
   #print-area { display: none; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -183,16 +162,16 @@ function renderChart(records) {
     tx.textContent=t; svg.appendChild(tx);
   });
 
-  // 125 目標線（上・薄緑点線）
+  // 125 目標線（上・オレンジ点線）
   svg.appendChild(svgEl('line',{x1:PL,x2:PL+cW,y1:yS(125),y2:yS(125),
-    stroke:'#4ade80','stroke-width':'1.5','stroke-dasharray':'4,3'}));
-  const lbl125=svgEl('text',{x:PL+cW+3,y:yS(125)+4,'font-size':'8',fill:'#16a34a','font-weight':'bold'});
+    stroke:'#f97316','stroke-width':'1.5','stroke-dasharray':'6,3'}));
+  const lbl125=svgEl('text',{x:PL+cW+3,y:yS(125)+4,'font-size':'8',fill:'#ea580c','font-weight':'bold'});
   lbl125.textContent='125'; svg.appendChild(lbl125);
 
-  // 75 目標線（下・薄青点線）
+  // 75 目標線（下・グレー点線）
   svg.appendChild(svgEl('line',{x1:PL,x2:PL+cW,y1:yS(75),y2:yS(75),
-    stroke:'#60a5fa','stroke-width':'1.5','stroke-dasharray':'4,3'}));
-  const lbl75=svgEl('text',{x:PL+cW+3,y:yS(75)+4,'font-size':'8',fill:'#2563eb','font-weight':'bold'});
+    stroke:'#94a3b8','stroke-width':'1.5','stroke-dasharray':'6,3'}));
+  const lbl75=svgEl('text',{x:PL+cW+3,y:yS(75)+4,'font-size':'8',fill:'#64748b','font-weight':'bold'});
   lbl75.textContent='75'; svg.appendChild(lbl75);
 
   // データ線（収縮期・拡張期のみ）
@@ -234,8 +213,8 @@ function renderChart(records) {
     mkL('#3b82f6','5,3','収縮期（夜・点線）'),
     mkL('#06b6d4','','拡張期（朝・実線）'),
     mkL('#06b6d4','5,3','拡張期（夜・点線）'),
-    mkRef('#4ade80','4,3','目標（上） 125'),
-    mkRef('#60a5fa','4,3','目標（下） 75'),
+    mkRef('#f97316','6,3','目標（上） 125'),
+    mkRef('#94a3b8','6,3','目標（下） 75'),
   );
 
   const wrap=h('div',{}); wrap.appendChild(svg); wrap.appendChild(legend);
@@ -398,27 +377,56 @@ function renderSession(label, icon, data, onChange, onMeta, period) {
   );
 }
 
-// ── 印刷共通ヘルパー ───────────────────────────────────────────────
-function doPrint(html) {
-  const pa=document.getElementById('print-area');
-  const appEl=document.getElementById('app');
-  const footerEl=document.getElementById('export-footer');
-  pa.innerHTML=html;
-  if(appEl) appEl.style.display='none';
-  if(footerEl) footerEl.style.display='none';
-  window.print();
-  if(appEl) appEl.style.display='';
-  if(footerEl) footerEl.style.display='';
-  pa.innerHTML='';
+// ── 印刷：画像生成してブラウザ印刷 ───────────────────────────────
+async function printViaImage(html, title) {
+  // 画像生成用の一時div
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;padding:32px;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;';
+  tmp.innerHTML = html;
+  document.body.appendChild(tmp);
+
+  try {
+    const canvas = await html2canvas(tmp, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      width: 794,
+      logging: false,
+    });
+    document.body.removeChild(tmp);
+
+    const imgData = canvas.toDataURL('image/png');
+
+    // 印刷用ウィンドウを開く
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('ポップアップがブロックされました。\nブラウザの設定でポップアップを許可してください。');
+      return;
+    }
+    printWin.document.write(`<!DOCTYPE html>
+<html><head>
+<title>${title}</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: white; }
+  img { width: 210mm; height: auto; display: block; page-break-inside: avoid; }
+</style>
+</head><body>
+<img src="${imgData}" onload="window.print();window.close();">
+</body></html>`);
+    printWin.document.close();
+  } catch(e) {
+    if (document.body.contains(tmp)) document.body.removeChild(tmp);
+    alert('印刷用画像の生成に失敗しました。');
+  }
 }
 
-// ── 印刷：家族用（最良値・最悪値） ────────────────────────────────
-function printRecord(records, ym) {
-  const ymLabel=ym.replace('-','年')+'月';
-  const days=new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
-  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+function buildFamilyPrintHTML(records, ym) {
+  const ymLabel = ym.replace('-','年') + '月';
+  const days = new Date(parseInt(ym.split('-')[0]), parseInt(ym.split('-')[1]), 0).getDate();
+  const colorOf = sys => { if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
 
-  // 月平均（最良・最悪の平均で計算）
   let sumAm={sys:0,dia:0,pulse:0,n:0}, sumPm={sys:0,dia:0,pulse:0,n:0};
   for(let i=1;i<=days;i++){
     const e=records[`${ym}-${String(i).padStart(2,'0')}`]; if(!e) continue;
@@ -430,11 +438,11 @@ function printRecord(records, ym) {
   const mPm=sumPm.n?{sys:Math.round(sumPm.sys/sumPm.n),dia:Math.round(sumPm.dia/sumPm.n),pulse:Math.round(sumPm.pulse/sumPm.n)}:null;
 
   const valCell=(v,bg)=>v
-    ?`<td style="padding:3px 5px;text-align:center;font-size:10px;font-weight:700;color:${colorOf(v.sys)};background:${bg}">${v.sys}</td><td style="padding:3px 4px;text-align:center;font-size:10px;background:${bg}">${v.dia}</td><td style="padding:3px 4px;text-align:center;font-size:10px;color:#c2410c;background:${bg}">${v.pulse}</td>`
-    :`<td colspan="3" style="text-align:center;color:#d1d5db;background:${bg};font-size:10px">—</td>`;
+    ?`<td style="padding:4px 5px;text-align:center;font-size:12px;font-weight:700;color:${colorOf(v.sys)};background:${bg}">${v.sys}</td><td style="padding:4px 4px;text-align:center;font-size:12px;background:${bg}">${v.dia}</td><td style="padding:4px 4px;text-align:center;font-size:12px;color:#c2410c;background:${bg}">${v.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#d1d5db;background:#f9fafb">—</td>`;
   const avgCellStr=avg=>avg
-    ?`<td style="padding:3px 5px;text-align:center;font-weight:700;color:${colorOf(avg.sys)};font-size:11px">${avg.sys}</td><td style="padding:3px 4px;text-align:center;font-weight:600;font-size:11px">${avg.dia}</td><td style="padding:3px 4px;text-align:center;color:#c2410c;font-weight:600;font-size:11px">${avg.pulse}</td>`
-    :`<td colspan="3" style="text-align:center;color:#9ca3af;font-size:10px">—</td>`;
+    ?`<td style="padding:4px 5px;text-align:center;font-weight:700;color:${colorOf(avg.sys)};font-size:13px">${avg.sys}</td><td style="padding:4px 4px;text-align:center;font-size:13px">${avg.dia}</td><td style="padding:4px 4px;text-align:center;color:#c2410c;font-size:13px">${avg.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#9ca3af">—</td>`;
 
   let rows='';
   for(let i=1;i<=days;i++){
@@ -442,66 +450,65 @@ function printRecord(records, ym) {
     const dow=['日','月','火','水','木','金','土'][new Date(d).getDay()];
     const dowColor=new Date(d).getDay()===0?'#dc2626':new Date(d).getDay()===6?'#2563eb':'#374151';
     const e=records[d]||null;
-    const amBest=e?calcBest(e.am.readings):null;  const amWorst=e?calcWorst(e.am.readings):null;
-    const pmBest=e?calcBest(e.pm.readings):null;  const pmWorst=e?calcWorst(e.pm.readings):null;
+    const amBest=e?calcBest(e.am.readings):null; const amWorst=e?calcWorst(e.am.readings):null;
+    const pmBest=e?calcBest(e.pm.readings):null; const pmWorst=e?calcWorst(e.pm.readings):null;
     rows+=`<tr style="background:${i%2===0?'#f9fafb':'#fff'}">
-      <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;font-weight:600;color:${dowColor};white-space:nowrap;font-size:11px">${i}<span style="font-size:9px">(${dow})</span></td>
-      ${valCell(amBest,'#f0fdf4')}${valCell(amWorst,'#fff7ed')}<td style="border-left:2px solid #cbd5e1"></td>
-      ${valCell(pmBest,'#f0fdf4')}${valCell(pmWorst,'#fff7ed')}</tr>`;
+      <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-weight:600;color:${dowColor};font-size:12px;white-space:nowrap">${i}<span style="font-size:10px">(${dow})</span></td>
+      ${valCell(amBest,'#f0fdf4')}${valCell(amWorst,'#fff7ed')}<td style="border-left:2px solid #cbd5e1;padding:0"></td>
+      ${valCell(pmBest,'#f0fdf4')}${valCell(pmWorst,'#fff7ed')}
+    </tr>`;
   }
 
-  doPrint(`<div style="width:186mm;font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1f2937;font-size:8.5pt;">
-    <div style="border-bottom:2.5pt solid #16a34a;padding-bottom:4mm;margin-bottom:4mm;display:flex;justify-content:space-between;align-items:flex-end;">
+  return `<div style="color:#1f2937;">
+    <div style="border-bottom:3px solid #16a34a;padding-bottom:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;">
       <div>
-        <div style="font-size:7pt;color:#6b7280;">血圧手帳 ／ 家族用</div>
-        <div style="font-size:15pt;font-weight:800;color:#14532d;">${ymLabel}　血圧記録（最良・最悪値）</div>
+        <div style="font-size:11px;color:#6b7280;">血圧手帳 ／ 家族用</div>
+        <div style="font-size:22px;font-weight:800;color:#14532d;">${ymLabel}　血圧記録（最良・最悪値）</div>
       </div>
-      <div style="text-align:right;font-size:7pt;color:#6b7280;">
+      <div style="text-align:right;font-size:11px;color:#6b7280;">
         <div>氏名：＿＿＿＿＿＿＿＿＿＿</div>
-        <div style="margin-top:1mm;">印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
+        <div style="margin-top:3px;">印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
       </div>
     </div>
-    <div style="margin-bottom:3mm;font-size:7pt;color:#6b7280;">単位：mmHg（脈拍：bpm）　<span style="color:#15803d;font-weight:600;">■緑＝最良値</span>　<span style="color:#d97706;font-weight:600;">■橙＝最悪値</span>　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:7.5pt;table-layout:fixed;">
+    <div style="margin-bottom:10px;font-size:11px;color:#6b7280;">単位：mmHg（脈拍：bpm）　<span style="color:#15803d;font-weight:600;">■緑＝最良値</span>　<span style="color:#d97706;font-weight:600;">■橙＝最悪値</span>　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead>
         <tr style="background:#16a34a;color:white;">
-          <th style="padding:2mm 2mm;text-align:left;width:14mm;">日</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:1pt solid #4ade80;width:42mm;">🌅 朝　最良値</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:2pt solid #4ade80;width:42mm;">最悪値</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:1pt solid #4ade80;width:42mm;">🌙 夜　最良値</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;width:42mm;">最悪値</th>
+          <th rowspan="2" style="padding:6px;text-align:left;min-width:40px;">日</th>
+          <th colspan="6" style="padding:6px 4px;text-align:center;border-right:2px solid #4ade80;">🌅 朝</th>
+          <th style="padding:0;background:#16a34a;"></th>
+          <th colspan="6" style="padding:6px 4px;text-align:center;">🌙 夜</th>
         </tr>
-        <tr style="background:#15803d;color:#bbf7d0;font-size:6.5pt;">
-          <th style="padding:1mm 2mm;"></th>
-          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:1pt solid #4ade80;">脈</th>
-          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:2pt solid #4ade80;">脈</th>
-          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;border-right:1pt solid #4ade80;">脈</th>
-          <th style="padding:1mm;text-align:center;">上</th><th style="padding:1mm;text-align:center;">下</th><th style="padding:1mm;text-align:center;">脈</th>
+        <tr style="background:#15803d;color:#bbf7d0;font-size:10px;">
+          <th colspan="3" style="padding:3px 2px;text-align:center;border-right:1px solid #4ade80;background:#14532d;">最良値</th>
+          <th colspan="3" style="padding:3px 2px;text-align:center;border-right:2px solid #4ade80;background:#92400e;color:#fde68a;">最悪値</th>
+          <th style="padding:0;background:#16a34a;border:none;"></th>
+          <th colspan="3" style="padding:3px 2px;text-align:center;border-right:1px solid #4ade80;background:#14532d;">最良値</th>
+          <th colspan="3" style="padding:3px 2px;text-align:center;background:#92400e;color:#fde68a;">最悪値</th>
         </tr>
       </thead>
       <tbody>${rows}
-        <tr style="background:#f0fdf4;border-top:1.5pt solid #16a34a;">
-          <td style="padding:2mm 2mm;font-weight:700;color:#16a34a;font-size:7pt;">月平均</td>
-          <td colspan="3" style="border-right:1pt solid #cbd5e1;"></td>${avgCellStr(mAm)}
-          <td style="border-left:2pt solid #cbd5e1;"></td>
+        <tr style="background:#f0fdf4;border-top:2px solid #16a34a;">
+          <td style="padding:5px 6px;font-weight:700;color:#16a34a;font-size:12px;">月平均</td>
+          <td colspan="3" style="border-right:1px solid #cbd5e1;"></td>${avgCellStr(mAm)}
+          <td style="border-left:2px solid #cbd5e1;"></td>
           <td colspan="3"></td>${avgCellStr(mPm)}
         </tr>
       </tbody>
     </table>
-    <div style="margin-top:5mm;border:0.5pt solid #d1d5db;border-radius:2mm;padding:3mm 4mm;">
-      <div style="font-size:7pt;font-weight:600;color:#374151;margin-bottom:5mm;">備考・メモ</div>
-      <div style="border-bottom:0.5pt solid #e5e7eb;margin-bottom:5mm;"></div>
-      <div style="border-bottom:0.5pt solid #e5e7eb;"></div>
+    <div style="margin-top:16px;border:1px solid #d1d5db;border-radius:4px;padding:10px 12px;">
+      <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:18px;">備考・メモ</div>
+      <div style="border-bottom:1px solid #e5e7eb;margin-bottom:18px;"></div>
+      <div style="border-bottom:1px solid #e5e7eb;"></div>
     </div>
-    <div style="margin-top:3mm;font-size:6.5pt;color:#9ca3af;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
-  </div>`);
+    <div style="margin-top:10px;font-size:9px;color:#9ca3af;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
+  </div>`;
 }
 
-// ── 印刷：医者用（収縮期最良の1回） ───────────────────────────────
-function printRecordDoctor(records, ym) {
-  const ymLabel=ym.replace('-','年')+'月';
-  const days=new Date(parseInt(ym.split('-')[0]),parseInt(ym.split('-')[1]),0).getDate();
-  const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
+function buildDoctorPrintHTML(records, ym) {
+  const ymLabel = ym.replace('-','年') + '月';
+  const days = new Date(parseInt(ym.split('-')[0]), parseInt(ym.split('-')[1]), 0).getDate();
+  const colorOf = sys => { if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
 
   let sumAm={sys:0,dia:0,pulse:0,n:0}, sumPm={sys:0,dia:0,pulse:0,n:0};
   for(let i=1;i<=days;i++){
@@ -513,9 +520,14 @@ function printRecordDoctor(records, ym) {
   const mAm=sumAm.n?{sys:Math.round(sumAm.sys/sumAm.n),dia:Math.round(sumAm.dia/sumAm.n),pulse:Math.round(sumAm.pulse/sumAm.n)}:null;
   const mPm=sumPm.n?{sys:Math.round(sumPm.sys/sumPm.n),dia:Math.round(sumPm.dia/sumPm.n),pulse:Math.round(sumPm.pulse/sumPm.n)}:null;
 
+  const B='1px solid #cbd5e1';
+  const BH='2px solid #334155';
   const bestCell=b=>b
-    ?`<td style="padding:4px 6px;text-align:center;font-weight:700;color:${colorOf(b.sys)};font-size:12px">${b.sys}</td><td style="padding:4px 6px;text-align:center;font-size:12px">${b.dia}</td><td style="padding:4px 6px;text-align:center;color:#c2410c;font-size:12px">${b.pulse}</td>`
-    :`<td colspan="3" style="text-align:center;color:#d1d5db">—</td>`;
+    ?`<td style="padding:4px 6px;text-align:center;font-weight:700;color:${colorOf(b.sys)};font-size:13px;border-right:${B};">${b.sys}</td><td style="padding:4px 6px;text-align:center;font-size:13px;border-right:${B};">${b.dia}</td><td style="padding:4px 6px;text-align:center;color:#555;font-size:12px;border-right:${B};">${b.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#bbb;border-right:${B};">—</td>`;
+  const avgCell=avg=>avg
+    ?`<td style="padding:4px 6px;text-align:center;font-weight:700;color:${colorOf(avg.sys)};font-size:13px;border-right:${B};">${avg.sys}</td><td style="padding:4px 6px;text-align:center;font-size:13px;border-right:${B};">${avg.dia}</td><td style="padding:4px 6px;text-align:center;color:#555;font-size:12px;border-right:${B};">${avg.pulse}</td>`
+    :`<td colspan="3" style="text-align:center;color:#bbb;border-right:${B};">—</td>`;
 
   let rows='';
   for(let i=1;i<=days;i++){
@@ -525,62 +537,80 @@ function printRecordDoctor(records, ym) {
     const e=records[d]||null;
     const am=e?calcBest(e.am.readings):null;
     const pm=e?calcBest(e.pm.readings):null;
-    const amTime=e?.am?.time?`<span style="font-size:9px;color:#6b7280;margin-left:3px">🕐${e.am.time}</span>`:'';
-    const pmTime=e?.pm?.time?`<span style="font-size:9px;color:#6b7280;margin-left:3px">🕐${e.pm.time}</span>`:'';
-    const memo=[e?.am?.memo?`朝:${e.am.memo}`:'', e?.pm?.memo?`夜:${e.pm.memo}`:''].filter(Boolean).join(' / ');
-    rows+=`<tr style="background:${i%2===0?'#f9fafb':'#fff'}">
-      <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-weight:600;color:${dowColor};white-space:nowrap">${i}日<span style="font-size:10px;margin-left:2px">(${dow})</span></td>
-      <td style="padding:4px 3px;border-bottom:1px solid #e5e7eb;font-size:10px;color:#6b7280">${amTime}</td>
-      ${bestCell(am)}<td style="border-left:2px solid #e5e7eb;padding:4px 3px;font-size:10px;color:#6b7280">${pmTime}</td>${bestCell(pm)}
-      <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:9px;color:#64748b;max-width:80px">${memo}</td>
+    const amTime=e?.am?.time||'';
+    const pmTime=e?.pm?.time||'';
+    const memo=[e?.am?.memo?`朝:${e.am.memo}`:'',e?.pm?.memo?`夜:${e.pm.memo}`:''].filter(Boolean).join(' / ');
+    const bg=i%2===0?'#f9fafb':'#fff';
+    rows+=`<tr style="background:${bg};">
+      <td style="padding:4px 6px;border-bottom:${B};border-right:${B};font-weight:600;color:${dowColor};font-size:12px;white-space:nowrap;">${i}<span style="font-size:10px;">(${dow})</span></td>
+      <td style="padding:4px 5px;border-bottom:${B};border-right:${B};font-size:10px;color:#888;">${amTime}</td>
+      ${bestCell(am)}
+      <td style="padding:4px 5px;border-bottom:${B};border-right:${B};font-size:10px;color:#888;">${pmTime}</td>
+      ${bestCell(pm)}
+      <td style="padding:4px 6px;border-bottom:${B};font-size:10px;color:#555;">${memo}</td>
     </tr>`;
   }
 
-  doPrint(`<div style="width:186mm;font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1f2937;font-size:8.5pt;">
-    <div style="border-bottom:2.5pt solid #1e40af;padding-bottom:4mm;margin-bottom:4mm;display:flex;justify-content:space-between;align-items:flex-end;">
+  return `<div style="color:#1f2937;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;">
+    <div style="border-bottom:${BH};padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end;">
       <div>
-        <div style="font-size:7pt;color:#6b7280;">血圧手帳 ／ 医療機関提出用</div>
-        <div style="font-size:15pt;font-weight:800;color:#1e3a8a;">${ymLabel}　血圧記録</div>
+        <div style="font-size:10px;color:#888;letter-spacing:0.05em;">血圧手帳　医療機関提出用</div>
+        <div style="font-size:22px;font-weight:800;color:#1e293b;letter-spacing:-0.5px;">${ymLabel}　血圧記録</div>
       </div>
-      <div style="text-align:right;font-size:7pt;color:#6b7280;">
+      <div style="text-align:right;font-size:11px;color:#555;line-height:1.8;">
         <div>氏名：＿＿＿＿＿＿＿＿＿＿</div>
-        <div style="margin-top:1mm;">印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
+        <div>印刷日：${new Date().toLocaleDateString('ja-JP')}</div>
       </div>
     </div>
-    <div style="margin-bottom:3mm;font-size:7pt;color:#6b7280;">単位：mmHg（脈拍：bpm）　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:8pt;table-layout:fixed;">
+    <div style="margin-bottom:8px;font-size:10px;color:#666;display:flex;gap:12px;flex-wrap:wrap;">
+      <span>単位：mmHg（脈拍：bpm）</span>
+      ${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">● ${l}</span>`).join('')}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;border:${B};">
       <thead>
-        <tr style="background:#1e40af;color:white;">
-          <th style="padding:2mm 2mm;text-align:left;width:16mm;">日付</th>
-          <th style="padding:2mm 1mm;text-align:center;width:14mm;font-size:6.5pt;color:#bfdbfe;">朝時刻</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;border-right:2pt solid #3b82f6;width:48mm;">🌅 朝</th>
-          <th style="padding:2mm 1mm;text-align:center;width:14mm;font-size:6.5pt;color:#bfdbfe;">夜時刻</th>
-          <th colspan="3" style="padding:2mm 1mm;text-align:center;width:48mm;">🌙 夜</th>
-          <th style="padding:2mm 1mm;text-align:center;width:30mm;font-size:6.5pt;color:#bfdbfe;">メモ</th>
+        <tr style="border-bottom:${BH};">
+          <th rowspan="2" style="padding:5px 6px;text-align:left;border-right:${B};font-size:11px;color:#334155;">日付</th>
+          <th rowspan="2" style="padding:5px 4px;text-align:center;border-right:${B};font-size:10px;color:#555;">朝<br>時刻</th>
+          <th colspan="3" style="padding:5px 4px;text-align:center;border-right:${BH};font-size:11px;color:#334155;">朝</th>
+          <th rowspan="2" style="padding:5px 4px;text-align:center;border-right:${B};font-size:10px;color:#555;">夜<br>時刻</th>
+          <th colspan="3" style="padding:5px 4px;text-align:center;border-right:${B};font-size:11px;color:#334155;">夜</th>
+          <th rowspan="2" style="padding:5px 4px;text-align:center;font-size:10px;color:#555;">メモ</th>
         </tr>
-        <tr style="background:#1e3a8a;color:#bfdbfe;font-size:6.5pt;">
-          <th style="padding:1mm 2mm;"></th>
-          <th style="padding:1mm;"></th>
-          <th style="padding:1mm;text-align:center;">収縮期</th><th style="padding:1mm;text-align:center;">拡張期</th><th style="padding:1mm;text-align:center;border-right:2pt solid #3b82f6;">脈拍</th>
-          <th style="padding:1mm;"></th>
-          <th style="padding:1mm;text-align:center;">収縮期</th><th style="padding:1mm;text-align:center;">拡張期</th><th style="padding:1mm;text-align:center;">脈拍</th>
-          <th style="padding:1mm;"></th>
+        <tr style="border-bottom:${B};">
+          <th style="padding:3px 6px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">収縮期</th>
+          <th style="padding:3px 6px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">拡張期</th>
+          <th style="padding:3px 6px;text-align:center;border-right:${BH};font-size:10px;color:#555;font-weight:500;">脈拍</th>
+          <th style="padding:3px 6px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">収縮期</th>
+          <th style="padding:3px 6px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">拡張期</th>
+          <th style="padding:3px 6px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">脈拍</th>
         </tr>
       </thead>
       <tbody>${rows}
-        <tr style="background:#eff6ff;border-top:1.5pt solid #1e40af;">
-          <td style="padding:2mm 2mm;font-weight:700;color:#1e40af;font-size:7pt;">月平均</td>
-          <td></td>${bestCell(mAm)}<td></td>${bestCell(mPm)}<td></td>
+        <tr style="border-top:${BH};background:#f8fafc;">
+          <td style="padding:5px 6px;font-weight:700;color:#334155;font-size:11px;border-right:${B};">月平均</td>
+          <td style="border-right:${B};"></td>${avgCell(mAm)}
+          <td style="border-right:${B};"></td>${avgCell(mPm)}
+          <td></td>
         </tr>
       </tbody>
     </table>
-    <div style="margin-top:5mm;border:0.5pt solid #d1d5db;border-radius:2mm;padding:3mm 4mm;">
-      <div style="font-size:7pt;font-weight:600;color:#374151;margin-bottom:5mm;">服薬・備考</div>
-      <div style="border-bottom:0.5pt solid #e5e7eb;margin-bottom:5mm;"></div>
-      <div style="border-bottom:0.5pt solid #e5e7eb;"></div>
+    <div style="margin-top:14px;border:${B};border-radius:3px;padding:8px 12px;">
+      <div style="font-size:10px;color:#555;font-weight:600;margin-bottom:16px;">服薬・備考</div>
+      <div style="border-bottom:${B};margin-bottom:16px;"></div>
+      <div style="border-bottom:${B};"></div>
     </div>
-    <div style="margin-top:3mm;font-size:6.5pt;color:#9ca3af;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
-  </div>`);
+    <div style="margin-top:8px;font-size:9px;color:#aaa;text-align:center;">※ 血圧手帳アプリ出力　|　医療機器ではありません</div>
+  </div>`;
+}
+
+function printRecord(records, ym) {
+  if(!Object.keys(records).length){ alert('記録がありません。'); return; }
+  printViaImage(buildFamilyPrintHTML(records, ym), '血圧記録（家族用）');
+}
+
+function printRecordDoctor(records, ym) {
+  if(!Object.keys(records).length){ alert('記録がありません。'); return; }
+  printViaImage(buildDoctorPrintHTML(records, ym), '血圧記録（医療機関提出用）');
 }
 
 // ── Share ──────────────────────────────────────────────────────────
@@ -609,12 +639,12 @@ function buildShareSVGChart(records, ym, calcFn) {
     svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(t).toFixed(1)}" y2="${yS(t).toFixed(1)}" stroke="${isKey?'#e2e8f0':'#f1f5f9'}" stroke-width="1"/>`;
     svgBody+=`<text x="${PL-4}" y="${(yS(t)+4).toFixed(1)}" text-anchor="end" font-size="8" fill="${isKey?'#64748b':'#94a3b8'}"${isKey?' font-weight="bold"':''}>${t}</text>`;
   });
-  // 125目標線（上・緑点線）
-  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(125).toFixed(1)}" y2="${yS(125).toFixed(1)}" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-  svgBody+=`<text x="${PL+cW+3}" y="${(yS(125)+4).toFixed(1)}" font-size="8" fill="#16a34a" font-weight="bold">125</text>`;
-  // 75目標線（下・青点線）
-  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(75).toFixed(1)}" y2="${yS(75).toFixed(1)}" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-  svgBody+=`<text x="${PL+cW+3}" y="${(yS(75)+4).toFixed(1)}" font-size="8" fill="#2563eb" font-weight="bold">75</text>`;
+  // 125目標線（上・オレンジ点線）
+  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(125).toFixed(1)}" y2="${yS(125).toFixed(1)}" stroke="#f97316" stroke-width="1.5" stroke-dasharray="6,3"/>`;
+  svgBody+=`<text x="${PL+cW+3}" y="${(yS(125)+4).toFixed(1)}" font-size="8" fill="#ea580c" font-weight="bold">125</text>`;
+  // 75目標線（下・グレー点線）
+  svgBody+=`<line x1="${PL}" x2="${PL+cW}" y1="${yS(75).toFixed(1)}" y2="${yS(75).toFixed(1)}" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,3"/>`;
+  svgBody+=`<text x="${PL+cW+3}" y="${(yS(75)+4).toFixed(1)}" font-size="8" fill="#64748b" font-weight="bold">75</text>`;
   // データ線（収縮期・拡張期のみ）
   [[p=>p.amAvg?.sys,'#3b82f6','2',''],[p=>p.pmAvg?.sys,'#3b82f6','2','5,3'],
    [p=>p.amAvg?.dia,'#06b6d4','1.5',''],[p=>p.pmAvg?.dia,'#06b6d4','1.5','5,3'],
@@ -631,8 +661,8 @@ function buildShareSVGChart(records, ym, calcFn) {
     ['#3b82f6','5,3','収縮期（夜・点線）'],
     ['#06b6d4','','拡張期（朝・実線）'],
     ['#06b6d4','5,3','拡張期（夜・点線）'],
-    ['#4ade80','4,3','目標（上） 125'],
-    ['#60a5fa','4,3','目標（下） 75'],
+    ['#f97316','6,3','目標（上） 125'],
+    ['#94a3b8','6,3','目標（下） 75'],
   ];
   const legendHtml=legendItems.map(([c,d,lbl])=>{
     const w=d?'1.5':'2';
