@@ -688,7 +688,12 @@ async function doShare(wrap, ymLabel) {
   loading.innerHTML='<div style="background:white;border-radius:12px;padding:24px 32px;font-size:15px;font-weight:600;color:#1e293b;">📷 画像を生成中...</div>';
   document.body.appendChild(loading);
   try {
-    const canvas=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:'#f1f5f9',logging:false});
+    const canvas = await html2canvas(wrap, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+    });
     sa.innerHTML=''; document.body.removeChild(loading);
     canvas.toBlob(async blob=>{
       if(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([blob],'bp.png',{type:'image/png'})]})){
@@ -769,41 +774,95 @@ async function shareDoctor(records, ym) {
   const colorOf=sys=>{ if(sys<120)return'#16a34a'; if(sys<130)return'#65a30d'; if(sys<140)return'#d97706'; return'#dc2626'; };
 
   const wrap=document.createElement('div');
-  wrap.style.cssText='width:420px;background:#f1f5f9;padding:12px;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;';
+  // A4縦比率: 595x842px（72dpi相当）
+  wrap.style.cssText='width:595px;min-height:842px;background:white;padding:32px 36px;font-family:Hiragino Sans,Noto Sans JP,Yu Gothic,sans-serif;box-sizing:border-box;';
 
-  // ヘッダー（青）
+  // ヘッダー（シンプル・罫線のみ）
   const hdr=document.createElement('div');
-  hdr.style.cssText='background:linear-gradient(135deg,#1e40af,#3b82f6);border-radius:12px;padding:14px 16px;color:white;margin-bottom:10px;';
-  hdr.innerHTML=`<div style="font-size:11px;opacity:0.8">血圧手帳 ／ 医療機関提出用</div><div style="font-size:18px;font-weight:800">${ymLabel}　血圧記録</div><div style="font-size:10px;opacity:0.7;margin-top:2px">作成日：${new Date().toLocaleDateString('ja-JP')}</div>`;
+  hdr.style.cssText='border-bottom:2px solid #334155;padding-bottom:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;';
+  hdr.innerHTML=`
+    <div>
+      <div style="font-size:10px;color:#888;letter-spacing:0.05em;">血圧手帳　医療機関提出用</div>
+      <div style="font-size:22px;font-weight:800;color:#1e293b;">${ymLabel}　血圧記録</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#555;line-height:1.8;">
+      <div>氏名：＿＿＿＿＿＿＿＿＿＿</div>
+      <div>作成日：${new Date().toLocaleDateString('ja-JP')}</div>
+    </div>`;
   wrap.appendChild(hdr);
 
   // グラフ
   const svgStr=buildShareSVGChart(records,ym,calcBest);
-  if(svgStr){ const cb=document.createElement('div'); cb.style.cssText='margin-bottom:10px;'; cb.innerHTML=`<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:6px;padding:0 2px;">📈 推移グラフ</div>${svgStr}`; wrap.appendChild(cb); }
+  if(svgStr){
+    const cb=document.createElement('div');
+    cb.style.cssText='margin-bottom:12px;';
+    cb.innerHTML=`<div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:6px;">推移グラフ</div>${svgStr}`;
+    wrap.appendChild(cb);
+  }
 
   // 一覧表
   if(ym!=='all'){
-    const bestCell=b=>b?`<td style="padding:3px 4px;text-align:center;font-size:10px;font-weight:700;color:${colorOf(b.sys)}">${b.sys}</td><td style="padding:3px 3px;text-align:center;font-size:10px">${b.dia}</td><td style="padding:3px 3px;text-align:center;font-size:10px;color:#c2410c">${b.pulse}</td>`:`<td colspan="3" style="text-align:center;color:#d1d5db;font-size:10px">—</td>`;
-    let tbl=`<div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:6px;">📋 月次記録（単位：mmHg / bpm）</div>
-    <table style="width:100%;border-collapse:collapse;font-size:10px"><thead>
-      <tr style="background:#1e40af;color:white">
-        <th rowspan="2" style="padding:4px 5px;text-align:left">日</th>
-        <th colspan="3" style="padding:4px;text-align:center;border-right:1px solid #3b82f6">🌅 朝</th>
-        <th colspan="3" style="padding:4px;text-align:center">🌙 夜</th>
-      </tr>
-      <tr style="background:#1e3a8a;color:#bfdbfe;font-size:9px">
-        <th style="padding:3px;text-align:center">収縮期</th><th style="padding:3px;text-align:center">拡張期</th><th style="padding:3px;text-align:center;border-right:1px solid #3b82f6">脈拍</th>
-        <th style="padding:3px;text-align:center">収縮期</th><th style="padding:3px;text-align:center">拡張期</th><th style="padding:3px;text-align:center">脈拍</th>
-      </tr></thead><tbody>`;
+    const B='1px solid #cbd5e1';
+    const BH='2px solid #334155';
+    const bestCell=b=>b
+      ?`<td style="padding:4px 5px;text-align:center;font-size:11px;font-weight:700;color:${colorOf(b.sys)};border-right:${B};">${b.sys}</td><td style="padding:4px 5px;text-align:center;font-size:11px;border-right:${B};">${b.dia}</td><td style="padding:4px 5px;text-align:center;font-size:11px;color:#555;border-right:${B};">${b.pulse}</td>`
+      :`<td colspan="3" style="text-align:center;color:#bbb;border-right:${B};">—</td>`;
+
+    let tbl=`
+    <div style="font-size:10px;color:#666;margin-bottom:6px;">単位：mmHg（脈拍：bpm）　${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600;">●${l}</span>`).join('　')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;border:${B};">
+      <thead>
+        <tr style="border-bottom:${BH};">
+          <th style="padding:5px 6px;text-align:left;border-right:${B};font-size:11px;color:#334155;width:48px;">日付</th>
+          <th colspan="3" style="padding:5px 4px;text-align:center;border-right:${BH};color:#334155;">朝</th>
+          <th colspan="3" style="padding:5px 4px;text-align:center;border-right:${B};color:#334155;">夜</th>
+          <th style="padding:5px 4px;text-align:center;font-size:10px;color:#555;">メモ</th>
+        </tr>
+        <tr style="border-bottom:${B};">
+          <th style="padding:3px 6px;border-right:${B};"></th>
+          <th style="padding:3px 5px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">収縮期</th>
+          <th style="padding:3px 5px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">拡張期</th>
+          <th style="padding:3px 5px;text-align:center;border-right:${BH};font-size:10px;color:#555;font-weight:500;">脈拍</th>
+          <th style="padding:3px 5px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">収縮期</th>
+          <th style="padding:3px 5px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">拡張期</th>
+          <th style="padding:3px 5px;text-align:center;border-right:${B};font-size:10px;color:#555;font-weight:500;">脈拍</th>
+          <th style="padding:3px 5px;"></th>
+        </tr>
+      </thead><tbody>`;
     for(let i=1;i<=days;i++){
-      const d=`${ym}-${String(i).padStart(2,'0')}`; const e=records[d]||null;
-      const am=e?calcBest(e.am.readings):null; const pm=e?calcBest(e.pm.readings):null;
-      tbl+=`<tr style="background:${i%2===0?'#f9fafb':'white'}"><td style="padding:3px 5px;font-weight:600;font-size:10px">${i}日</td>${bestCell(am)}${bestCell(pm)}</tr>`;
+      const d=`${ym}-${String(i).padStart(2,'0')}`;
+      const dow=['日','月','火','水','木','金','土'][new Date(d).getDay()];
+      const dowColor=new Date(d).getDay()===0?'#dc2626':new Date(d).getDay()===6?'#2563eb':'#374151';
+      const e=records[d]||null;
+      const am=e?calcBest(e.am.readings):null;
+      const pm=e?calcBest(e.pm.readings):null;
+      const memo=[e?.am?.memo?`朝:${e.am.memo}`:'',e?.pm?.memo?`夜:${e.pm.memo}`:''].filter(Boolean).join(' / ');
+      const bg=i%2===0?'#f9fafb':'white';
+      tbl+=`<tr style="background:${bg};">
+        <td style="padding:4px 6px;border-bottom:${B};border-right:${B};font-weight:600;color:${dowColor};font-size:11px;white-space:nowrap;">${i}<span style="font-size:9px;">(${dow})</span></td>
+        ${bestCell(am)}
+        ${bestCell(pm)}
+        <td style="padding:4px 6px;border-bottom:${B};font-size:9px;color:#555;">${memo}</td>
+      </tr>`;
     }
-    tbl+=`</tbody></table><div style="margin-top:6px;font-size:9px">${[['正常','#16a34a'],['正常高値','#65a30d'],['高値血圧','#d97706'],['高血圧','#dc2626']].map(([l,c])=>`<span style="color:${c};font-weight:600">●${l} </span>`).join('')}</div>`;
-    const tb=document.createElement('div'); tb.style.cssText='background:white;border-radius:12px;padding:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06);'; tb.innerHTML=tbl; wrap.appendChild(tb);
+    tbl+=`</tbody></table>`;
+
+    // 備考欄
+    tbl+=`<div style="margin-top:14px;border:${B};border-radius:3px;padding:8px 12px;">
+      <div style="font-size:10px;color:#555;font-weight:600;margin-bottom:14px;">服薬・備考</div>
+      <div style="border-bottom:${B};margin-bottom:14px;"></div>
+      <div style="border-bottom:${B};"></div>
+    </div>`;
+
+    const tb=document.createElement('div');
+    tb.innerHTML=tbl;
+    wrap.appendChild(tb);
   }
-  const ftr=document.createElement('div'); ftr.style.cssText='text-align:center;font-size:10px;color:#94a3b8;margin-top:8px;'; ftr.textContent='血圧手帳アプリより共有（医療機関提出用）'; wrap.appendChild(ftr);
+
+  const ftr=document.createElement('div');
+  ftr.style.cssText='text-align:center;font-size:9px;color:#aaa;margin-top:10px;';
+  ftr.textContent='血圧手帳アプリより共有（医療機関提出用）　|　医療機器ではありません';
+  wrap.appendChild(ftr);
   await doShare(wrap, ymLabel);
 }
 
@@ -1158,8 +1217,6 @@ function render() {
         sel,
         h('button',{style:{padding:'6px 10px',background:'#15803d',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareFamily(state.records,tableMonth)},'👨‍👩‍👧 家族共有'),
         h('button',{style:{padding:'6px 10px',background:'#1e40af',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>shareDoctor(state.records,tableMonth)},'🏥 医者共有'),
-        h('button',{style:{padding:'6px 10px',background:'#374151',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>printRecord(state.records,tableMonth)},'🖨️ 家族印刷'),
-        h('button',{style:{padding:'6px 10px',background:'#1e3a8a',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'},onclick:()=>printRecordDoctor(state.records,tableMonth)},'🏥 医者印刷'),
       ),
     ));
     body.appendChild(h('div',{style:{background:'white',borderRadius:'16px',padding:'14px',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}},
